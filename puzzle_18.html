@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ジグソーパズル</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
+      background-color: #f0f4f8;
+      text-align: center;
+      color: #333;
+    }
+    h1 {
+      font-size: 28px;
+      color: #1a568c;
+      margin-bottom: 10px;
+    }
+    /* BGMコントロールバー */
+    .bgm-control {
+      margin-bottom: 20px;
+    }
+    .bgm-btn {
+      font-size: 16px;
+      font-weight: bold;
+      padding: 8px 16px;
+      border: 2px solid #455a64;
+      border-radius: 8px;
+      background-color: #fff;
+      color: #455a64;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .bgm-btn.active {
+      background-color: #455a64;
+      color: white;
+    }
+
+    /* 選択画面 */
+    .menu-container {
+      max-width: 950px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .section-box {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .section-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #2c3e50;
+      margin-bottom: 12px;
+      text-align: left;
+      border-left: 6px solid #2e7d32;
+      padding-left: 10px;
+    }
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .photo-btn {
+      padding: 14px 10px;
+      font-size: 16px;
+      font-weight: bold;
+      border: 3px solid #ddd;
+      border-radius: 12px;
+      background-color: #f9f9f9;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .photo-btn:hover {
+      border-color: #2e7d32;
+      background-color: #e8f5e9;
+      transform: translateY(-2px);
+    }
+    .photo-btn.selected {
+      border-color: #2e7d32;
+      background-color: #c8e6c9;
+      color: #1b5e20;
+    }
+
+    .level-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+    .level-btn {
+      font-size: 20px;
+      font-weight: bold;
+      padding: 16px 30px;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      background-color: #0277bd;
+      color: white;
+      box-shadow: 0 4px 0 #01579b;
+      transition: transform 0.1s, background-color 0.2s;
+    }
+    .level-btn:hover {
+      background-color: #0288d1;
+      transform: translateY(-2px);
+    }
+    .level-btn:active {
+      transform: translateY(2px);
+      box-shadow: none;
+    }
+
+    /* ゲーム画面全体 */
+    #game-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      position: relative;
+    }
+    .controls {
+      display: flex;
+      gap: 20px;
+    }
+    .nav-btn {
+      font-size: 18px;
+      font-weight: bold;
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px;
+      background-color: #455a64;
+      color: white;
+      cursor: pointer;
+      box-shadow: 0 3px 0 #263238;
+    }
+    .nav-btn:active {
+      transform: translateY(2px);
+      box-shadow: none;
+    }
+
+    .puzzle-workspace {
+      position: relative;
+      width: 1050px;
+      height: 420px;
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+    }
+
+    #board-container, #pieces-container {
+      width: 500px;
+      height: 400px;
+      background-color: #ffffff;
+      border: 3px dashed #b0bec5;
+      border-radius: 12px;
+      position: relative;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+    }
+    #pieces-container {
+      border: 3px solid #80deea;
+      background-color: #e0f7fa;
+      overflow: auto;
+    }
+
+    .puzzle-piece {
+      position: absolute;
+      cursor: grab;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+      touch-action: none;
+      z-index: 100;
+    }
+    
+    .puzzle-piece.placed {
+      cursor: default;
+      filter: drop-shadow(0 0 4px rgba(76, 175, 80, 0.9));
+      z-index: 10 !important;
+    }
+
+    /* クリアダイアログ */
+    #clear-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      text-align: center;
+      animation: pop 0.3s ease-out;
+    }
+    @keyframes pop {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>思い出の写真でパズル</h1>
+  
+  <!-- BGMコントロール -->
+  <div class="bgm-control">
+    <button id="bgm-toggle-btn" class="bgm-btn" onclick="toggleBGM()">♪ BGM: オフ</button>
+  </div>
+
+  <!-- 選択画面 -->
+  <div id="menu-screen" class="menu-container">
+    <div class="section-box">
+      <div class="section-title">1. 写真をえらぶ</div>
+      <div class="photo-grid">
+        <button class="photo-btn selected" id="btn-dam" onclick="selectPhoto('dam.jpg', 'btn-dam')">ダム 🌊</button>
+        <button class="photo-btn" id="btn-building" onclick="selectPhoto('building.jpg', 'btn-building')">建物・山 ⛰️</button>
+        <button class="photo-btn" id="btn-noodle" onclick="selectPhoto('noodle.jpg', 'btn-noodle')">麺料理 🍜</button>
+        <button class="photo-btn" id="btn-teishoku" onclick="selectPhoto('teishoku.jpg', 'btn-teishoku')">定食 🍱</button>
+        <button class="photo-btn" id="btn-road" onclick="selectPhoto('road.jpg', 'btn-road')">道路・山並み 🚗</button>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">2. ピース数をえらんでスタート！</div>
+      <div class="level-buttons">
+        <button class="level-btn" onclick="startGame(20)">20 ピース</button>
+        <button class="level-btn" onclick="startGame(40)">40 ピース</button>
+        <button class="level-btn" onclick="startGame(60)">60 ピース</button>
+        <button class="level-btn" onclick="startGame(80)">80 ピース</button>
+        <button class="level-btn" onclick="startGame(100)">100 ピース</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- パズルゲーム画面 -->
+  <div id="game-screen">
+    <div class="controls">
+      <button class="nav-btn" onclick="backToMenu()">← えらびなおす</button>
+      <button class="nav-btn" onclick="resetCurrentGame()">もう一度あそぶ</button>
+    </div>
+    <div class="puzzle-workspace">
+      <div id="board-container"></div>
+      <div id="pieces-container"></div>
+    </div>
+  </div>
+
+  <!-- クリアダイアログ -->
+  <div id="clear-modal">
+    <div class="modal-content">
+      <h2 style="font-size: 36px; color: #e91e63; margin: 0 0 20px 0;">できたね！すごーい！🎉</h2>
+      <button class="level-btn" onclick="backToMenu()" style="font-size:18px; padding: 12px 24px;">つぎのパズルをえらぶ</button>
+    </div>
+  </div>
+
+  <script>
+    const BOARD_WIDTH = 500;
+    const BOARD_HEIGHT = 400;
+
+    let selectedImage = 'dam.jpg';
+    let currentPiecesCount = 20;
+    let placedCount = 0;
+    let currentGameSession = 0;
+
+    // --- 童謡BGMシステム（きらきらぼし・チューリップ） ---
+    let audioCtx = null;
+    let isBgmOn = false;
+    let bgmTimer = null;
+
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function toggleBGM() {
+      getAudioContext();
+      isBgmOn = !isBgmOn;
+      const btn = document.getElementById('bgm-toggle-btn');
+      if (isBgmOn) {
+        btn.textContent = '♪ BGM: オン';
+        btn.classList.add('active');
+        playNextBgmSong();
+      } else {
+        btn.textContent = '♪ BGM: オフ';
+        btn.classList.remove('active');
+        if (bgmTimer) {
+          clearTimeout(bgmTimer);
+          bgmTimer = null;
+        }
+      }
+    }
+
+    // 音階の周波数定義 (C4 〜 C5)
+    const N = {
+      C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23,
+      G4: 392.00, A4: 440.00, B4: 493.88, C5: 523.25
+    };
+
+    const SONGS = [
+      {
+        title: "きらきらぼし",
+        notes: [
+          { f: N.C4, d: 0.4 }, { f: N.C4, d: 0.4 }, { f: N.G4, d: 0.4 }, { f: N.G4, d: 0.4 },
+          { f: N.A4, d: 0.4 }, { f: N.A4, d: 0.4 }, { f: N.G4, d: 0.8 },
+          { f: N.F4, d: 0.4 }, { f: N.F4, d: 0.4 }, { f: N.E4, d: 0.4 }, { f: N.E4, d: 0.4 },
+          { f: N.D4, d: 0.4 }, { f: N.D4, d: 0.4 }, { f: N.C4, d: 0.8 }
+        ]
+      },
+      {
+        title: "チューリップ",
+        notes: [
+          { f: N.C4, d: 0.4 }, { f: N.D4, d: 0.4 }, { f: N.E4, d: 0.8 },
+          { f: N.C4, d: 0.4 }, { f: N.D4, d: 0.4 }, { f: N.E4, d: 0.8 },
+          { f: N.G4, d: 0.4 }, { f: N.E4, d: 0.4 }, { f: N.D4, d: 0.4 }, { f: N.C4, d: 0.4 },
+          { f: N.D4, d: 0.4 }, { f: N.E4, d: 0.4 }, { f: N.D4, d: 0.8 }
+        ]
+      }
+    ];
+
+    let currentSongIdx = 0;
+
+    function playNextBgmSong() {
+      if (!isBgmOn) return;
+      
+      const song = SONGS[currentSongIdx];
+      currentSongIdx = (currentSongIdx + 1) % SONGS.length;
+
+      let totalDuration = 0;
+      song.notes.forEach(note => {
+        playTone(note.f, note.d, totalDuration);
+        totalDuration += note.d * 1000;
+      });
+
+      // 曲と曲の間に4秒間のゆったりした休憩時間を設ける
+      const restInterval = totalDuration + 4000;
+      bgmTimer = setTimeout(() => {
+        playNextBgmSong();
+      }, restInterval);
+    }
+
+    function playTone(freq, duration, delayMs) {
+      try {
+        const ctx = getAudioContext();
+        setTimeout(() => {
+          if (!isBgmOn) return;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle'; // 温かみのあるオルゴール調の音色
+          osc.frequency.value = freq;
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          const now = ctx.currentTime;
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+          osc.start(now);
+          osc.stop(now + duration);
+        }, delayMs);
+      } catch (e) {
+        console.log('BGM error:', e);
+      }
+    }
+
+    function playSound(type) {
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'pingpong') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.3);
+        } else if (type === 'boo') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(130.81, ctx.currentTime);
+          osc.frequency.setValueAtTime(110, ctx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.35, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.35);
+        } else if (type === 'clear') {
+          const notes = [523.25, 659.25, 783.99, 1046.50];
+          notes.forEach((freq, idx) => {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.connect(g);
+            g.connect(ctx.destination);
+            o.frequency.value = freq;
+            g.gain.setValueAtTime(0.3, ctx.currentTime + idx * 0.1);
+            g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + idx * 0.1 + 0.4);
+            o.start(ctx.currentTime + idx * 0.1);
+            o.stop(ctx.currentTime + idx * 0.1 + 0.4);
+          });
+        }
+      } catch (e) {
+        console.log('Sound error:', e);
+      }
+    }
+
+    function selectPhoto(filename, btnId) {
+      selectedImage = filename;
+      document.querySelectorAll('.photo-btn').forEach(btn => btn.classList.remove('selected'));
+      document.getElementById(btnId).classList.add('selected');
+    }
+
+    const PIECE_CONFIGS = {
+      20: { cols: 5, rows: 4 },
+      40: { cols: 8, rows: 5 },
+      60: { cols: 10, rows: 6 },
+      80: { cols: 10, rows: 8 },
+      100: { cols: 10, rows: 10 }
+    };
+
+    function wipeOutEverything() {
+      const board = document.getElementById('board-container');
+      const piecesArea = document.getElementById('pieces-container');
+      if (board) {
+        board.innerHTML = '';
+        board.style.backgroundImage = 'none';
+      }
+      if (piecesArea) {
+        piecesArea.innerHTML = '';
+      }
+    }
+
+    function startGame(pieces) {
+      getAudioContext();
+      currentPiecesCount = pieces;
+      placedCount = 0;
+      currentGameSession++;
+      const thisSession = currentGameSession;
+
+      wipeOutEverything();
+
+      document.getElementById('menu-screen').style.display = 'none';
+      document.getElementById('game-screen').style.display = 'flex';
+      document.getElementById('clear-modal').style.display = 'none';
+
+      const targetImgSrc = selectedImage;
+      const img = new Image();
+      
+      img.onload = () => {
+        if (thisSession === currentGameSession && selectedImage === targetImgSrc) {
+          buildPuzzleBoard(img, thisSession);
+        }
+      };
+      img.onerror = () => {
+        alert('画像ファイル「' + targetImgSrc + '」が見つかりませんでした。HTMLファイルと同じフォルダーに画像があるかご確認ください。');
+        backToMenu();
+      };
+      img.src = targetImgSrc;
+    }
+
+    function backToMenu() {
+      currentGameSession++;
+      wipeOutEverything();
+      document.getElementById('game-screen').style.display = 'none';
+      document.getElementById('menu-screen').style.display = 'flex';
+      document.getElementById('clear-modal').style.display = 'none';
+    }
+
+    function resetCurrentGame() {
+      startGame(currentPiecesCount);
+    }
+
+    function drawJigsawEdge(ctx, x1, y1, x2, y2, tabType) {
+      if (tabType === 0) {
+        ctx.lineTo(x2, y2);
+        return;
+      }
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      const nx = -dy / len;
+      const ny = dx / len;
+
+      const p1x = x1 + dx * 0.35;
+      const p1y = y1 + dy * 0.35;
+      const p2x = x1 + dx * 0.65;
+      const p2y = y1 + dy * 0.65;
+      
+      const mx = x1 + dx * 0.5 + nx * (len * 0.2 * tabType);
+      const my = y1 + dy * 0.5 + ny * (len * 0.2 * tabType);
+
+      const tip1x = mx - dy * 0.15 * tabType;
+      const tip1y = my + dx * 0.15 * tabType;
+      const tip2x = mx + dy * 0.15 * tabType;
+      const tip2y = my - dx * 0.15 * tabType;
+
+      ctx.lineTo(p1x, p1y);
+      ctx.bezierCurveTo(tip1x, tip1y, tip2x, tip2y, p2x, p2y);
+      ctx.lineTo(x2, y2);
+    }
+
+    function buildPuzzleBoard(img, thisSession) {
+      const board = document.getElementById('board-container');
+      const piecesArea = document.getElementById('pieces-container');
+      
+      board.innerHTML = '';
+      piecesArea.innerHTML = '';
+
+      const config = PIECE_CONFIGS[currentPiecesCount];
+      const cols = config.cols;
+      const rows = config.rows;
+      const pWidth = BOARD_WIDTH / cols;
+      const pHeight = BOARD_HEIGHT / rows;
+
+      board.style.backgroundImage = `url("${selectedImage}")`;
+      board.style.backgroundSize = `${BOARD_WIDTH}px ${BOARD_HEIGHT}px`;
+      board.style.opacity = "0.9";
+
+      let hEdges = Array(rows + 1).fill(0).map(() => Array(cols).fill(0));
+      let vEdges = Array(rows).fill(0).map(() => Array(cols + 1).fill(0));
+
+      for (let r = 1; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          hEdges[r][c] = Math.random() < 0.5 ? 1 : -1;
+        }
+      }
+      for (let r = 0; r < rows; r++) {
+        for (let c = 1; c < cols; c++) {
+          vEdges[r][c] = Math.random() < 0.5 ? 1 : -1;
+        }
+      }
+
+      const pieces = [];
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const pad = Math.max(pWidth, pHeight) * 0.3;
+          const canvas = document.createElement('canvas');
+          canvas.width = pWidth + pad * 2;
+          canvas.height = pHeight + pad * 2;
+          const ctx = canvas.getContext('2d');
+
+          const offsetX = c * pWidth - pad;
+          const offsetY = r * pHeight - pad;
+
+          ctx.save();
+          ctx.translate(-offsetX, -offsetY);
+
+          ctx.beginPath();
+          const startX = c * pWidth;
+          const startY = r * pHeight;
+          const endX = startX + pWidth;
+          const endY = startY + pHeight;
+
+          ctx.moveTo(startX, startY);
+          drawJigsawEdge(ctx, startX, startY, endX, startY, hEdges[r][c]);
+          drawJigsawEdge(ctx, endX, startY, endX, endY, vEdges[r][c + 1]);
+          drawJigsawEdge(ctx, endX, endY, startX, endY, hEdges[r + 1][c] ? -hEdges[r + 1][c] : 0);
+          drawJigsawEdge(ctx, startX, endY, startX, startY, vEdges[r][c] ? -vEdges[r][c] : 0);
+          
+          ctx.closePath();
+          ctx.clip();
+
+          ctx.drawImage(img, 0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+          ctx.restore();
+
+          // 白いフチ
+          ctx.save();
+          ctx.translate(-offsetX, -offsetY);
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          drawJigsawEdge(ctx, startX, startY, endX, startY, hEdges[r][c]);
+          drawJigsawEdge(ctx, endX, startY, endX, endY, vEdges[r][c + 1]);
+          drawJigsawEdge(ctx, endX, endY, startX, endY, hEdges[r + 1][c] ? -hEdges[r + 1][c] : 0);
+          drawJigsawEdge(ctx, startX, endY, startX, startY, vEdges[r][c] ? -vEdges[r][c] : 0);
+          ctx.closePath();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#ffffff';
+          ctx.stroke();
+          ctx.restore();
+
+          const piece = document.createElement('div');
+          piece.classList.add('puzzle-piece');
+          piece.appendChild(canvas);
+
+          const correctX = c * pWidth;
+          const correctY = r * pHeight;
+
+          piece.dataset.correctX = correctX;
+          piece.dataset.correctY = correctY;
+          piece.dataset.pad = pad;
+
+          pieces.push({ piece, pad, correctX, correctY });
+        }
+      }
+
+      pieces.sort(() => Math.random() - 0.5);
+
+      const totalPieces = pieces.length;
+      const areaCols = Math.ceil(Math.sqrt(totalPieces * (500 / 400)));
+      const areaRows = Math.ceil(totalPieces / areaCols);
+      const cellW = 480 / areaCols;
+      const cellH = 380 / areaRows;
+
+      pieces.forEach((item, index) => {
+        const piece = item.piece;
+        const pad = item.pad;
+        
+        const rIdx = Math.floor(index / areaCols);
+        const cIdx = index % areaCols;
+
+        const randomX = cIdx * cellW + Math.random() * Math.max(0, cellW - pWidth);
+        const randomY = rIdx * cellH + Math.random() * Math.max(0, cellH - pHeight);
+
+        piece.style.left = `${randomX}px`;
+        piece.style.top = `${randomY}px`;
+
+        piecesArea.appendChild(piece);
+        initPieceDrag(piece, pWidth, pHeight, pad, thisSession);
+      });
+    }
+
+    function initPieceDrag(piece, pWidth, pHeight, pad, thisSession) {
+      let isDragging = false;
+      let startX, startY;
+      let initialLeft, initialTop;
+
+      const onPointerDown = (e) => {
+        if (thisSession !== currentGameSession || piece.classList.contains('placed')) return;
+        isDragging = true;
+
+        const gameScreen = document.getElementById('game-screen');
+        const rect = piece.getBoundingClientRect();
+        const screenRect = gameScreen.getBoundingClientRect();
+
+        piece.style.left = `${rect.left - screenRect.left}px`;
+        piece.style.top = `${rect.top - screenRect.top}px`;
+        gameScreen.appendChild(piece);
+        piece.style.zIndex = '99999';
+
+        startX = e.clientX || (e.touches && e.touches[0].clientX);
+        startY = e.clientY || (e.touches && e.touches[0].clientY);
+        initialLeft = parseFloat(piece.style.left);
+        initialTop = parseFloat(piece.style.top);
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+      };
+
+      const onPointerMove = (e) => {
+        if (!isDragging || thisSession !== currentGameSession) return;
+        const currentX = e.clientX || (e.touches && e.touches[0].clientX);
+        const currentY = e.clientY || (e.touches && e.touches[0].clientY);
+
+        const dx = currentX - startX;
+        const dy = currentY - startY;
+
+        piece.style.left = `${initialLeft + dx}px`;
+        piece.style.top = `${initialTop + dy}px`;
+      };
+
+      const onPointerUp = () => {
+        if (!isDragging) return;
+        isDragging = false;
+
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+
+        if (thisSession !== currentGameSession) return;
+
+        const board = document.getElementById('board-container');
+        const boardRect = board.getBoundingClientRect();
+        const pieceRect = piece.getBoundingClientRect();
+
+        const currentBoardX = (pieceRect.left + pad) - boardRect.left;
+        const currentBoardY = (pieceRect.top + pad) - boardRect.top;
+
+        const targetX = parseFloat(piece.dataset.correctX);
+        const targetY = parseFloat(piece.dataset.correctY);
+
+        const threshold = Math.min(pWidth, pHeight) * 0.45;
+
+        if (
+          Math.abs(currentBoardX - targetX) < threshold &&
+          Math.abs(currentBoardY - targetY) < threshold
+        ) {
+          piece.style.position = 'absolute';
+          piece.style.left = `${targetX - pad}px`;
+          piece.style.top = `${targetY - pad}px`;
+          piece.classList.add('placed');
+          board.appendChild(piece);
+
+          playSound('pingpong');
+          placedCount++;
+
+          if (placedCount === currentPiecesCount) {
+            setTimeout(() => {
+              if (thisSession === currentGameSession) {
+                playSound('clear');
+                document.getElementById('clear-modal').style.display = 'flex';
+              }
+            }, 300);
+          }
+        } else {
+          playSound('boo');
+          const piecesArea = document.getElementById('pieces-container');
+          piece.style.position = 'absolute';
+          piecesArea.appendChild(piece);
+          
+          const randomX = Math.random() * 350;
+          const randomY = Math.random() * 300;
+          piece.style.left = `${randomX}px`;
+          piece.style.top = `${randomY}px`;
+          piece.style.zIndex = '100';
+        }
+      };
+
+      piece.addEventListener('pointerdown', onPointerDown);
+    }
+  </script>
+</body>
+</html>
